@@ -1,5 +1,6 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/core/core.hpp>
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -95,12 +96,13 @@ void sortCorners(std::vector<cv::Point2f>& corners, cv::Point2f center)
 
 int main(int argc, char* argv[]) {
 
-	Mat img = imread("wrong_2.jpg", 0);//example.jpg,Screenshot_111.png ,IMG_6537.JPG
+	Mat img = imread("wrong_2.jpg", 0);//example.jpg,Screenshot_111.png ,IMG_6537.JPG,wrong_2.jpg
+	
 	Mat original_image = img.clone();
 	cv::Size size(3, 3);
 	cv::GaussianBlur(img, img, size, 0);
-	adaptiveThreshold(img, img, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 75, 20);
-
+	//adaptiveThreshold(img, img, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 75, 15);
+	adaptiveThreshold(img, img, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 75, 62);
 	cv::bitwise_not(img, img);
 
 	cv::Mat img2;
@@ -111,8 +113,8 @@ int main(int argc, char* argv[]) {
 	std::vector<cv::Point2f> corners;
 
 	namedWindow("origin", WINDOW_NORMAL);
-	imshow("origin", img);
-	resizeWindow("origin", 600, 600);
+	imshow("origin", original_image);
+	resizeWindow("origin", original_image.cols/3, original_image.rows/3);
 	setMouseCallback("origin", CallBackFunc, &corners);
 	
 	/*
@@ -162,9 +164,9 @@ int main(int argc, char* argv[]) {
 	
 	
 	waitKey(0);
-	for (int i = 0; i < corners.size(); i++) {
-		circle(img3, corners[i], 3, Scalar(255, 0, 0), 3, CV_AA);
-	}
+	//for (int i = 0; i < corners.size(); i++) {
+	//	circle(img3, corners[i], 3, Scalar(255, 0, 0), 3, CV_AA);
+	//}
 	Rect r = boundingRect(corners);
 	cout << "boundingRect:" << r << endl;
 	cv::Mat quad = cv::Mat::zeros(r.height, r.width, CV_8UC3);
@@ -185,22 +187,27 @@ int main(int argc, char* argv[]) {
 	//resizeWindow("drawcorner", img3.rows/3, img3.cols/3);
 	namedWindow("example2", WINDOW_NORMAL);
 	imshow("example2", quad);
-	resizeWindow("example2", quad.rows/3, quad.cols/3);
+	resizeWindow("example2", quad.cols/3, quad.rows/3);
 	/*
 	Mat cimg;
-
+	Mat testImg = quad.clone();
 	cvtColor(quad, cimg, CV_BGR2GRAY);
 	vector<Vec3f> circles;
-	HoughCircles(cimg, circles, CV_HOUGH_GRADIENT, 1, img.rows / 8, 100, 75, 0, 0);
+	//GaussianBlur(cimg, cimg, cv::Size(9, 9), 2, 2);
+	HoughCircles(cimg, circles, CV_HOUGH_GRADIENT, 1, cimg.rows/128, 100, 75, 0, 30);
+	//HoughCircles(cimg, circles, CV_HOUGH_GRADIENT, 1, cimg.rows/16, 100, 75, 0, 0);
+	cout << "circles.size=" << circles.size() << endl;
 	for (size_t i = 0; i < circles.size(); i++) {
 		Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
 		// circle center  
-		circle(quad, center, 3, Scalar(0, 255, 0), -1, 8, 0);
+		cout << circles[i] << endl;
+		circle(testImg, center, circles[i][2], Scalar(0, 0, 255), -1, CV_AA);
 	}
-
-	imshow("example4", quad);
+	namedWindow("circle_image", WINDOW_NORMAL);
+	imshow("circle_image", testImg);
+	resizeWindow("circle_image", cimg.cols/3, cimg.rows/3);
 	waitKey();
-
+	
 	double averR = 0;
 	vector<double> row;
 	vector<double> col;
@@ -274,7 +281,50 @@ int main(int argc, char* argv[]) {
 	}
 
 	// circle outline
-	imshow("example3", quad);*/  
+	imshow("example3", quad); 
+	*/
+
+	Mat answer = imread("img/answer2.jpg");
+	Mat test = quad.clone();
+	Mat check, check_grey;
+	int score = 0;
+	//Size size2(answer.cols, answer.rows);//the dst image size,e.g.100x100
+	resize(test, test, answer.size());
+	//imshow("answer", answer);
+	//imshow("test",test);
+
+	addWeighted(answer, 0.5, test, 0.5, 30, check);
+	// Cut answer section only
+	Rect rect(0, check.rows / 2.5 - 1, check.cols, check.rows / 2);
+	check = check(rect);
+	resize(check, check, Size(check.cols * 5, check.rows * 5));
+	cvtColor(check, check_grey, CV_BGR2GRAY);
+	GaussianBlur(check_grey, check_grey, Size(5, 5), 0);
+	adaptiveThreshold(check_grey, check_grey, 255, ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 75, 62);
+
+	vector<Vec3f> circles;
+	HoughCircles(check_grey, circles, CV_HOUGH_GRADIENT, 1, 50, 100, 12, 18, 60);
+
+	for (size_t i = 0; i < circles.size(); i++)
+	{
+		int r = cvRound(circles[i][2]);
+		int x = cvRound(circles[i][0]);
+		int y = cvRound(circles[i][1]);
+		Point c(x, y);
+		//circle(check, c, r, Scalar(0, 0, 255), 3, 8, 0);
+		Rect rect(x - r, y - r, 2 * r, 2 * r);
+		Mat submat = check_grey(rect);
+		double p = (double)countNonZero(submat) / (submat.size().width*submat.size().height);
+		if (p >= 0.6)
+		{
+			circle(check, c, r, Scalar(0, 255, 0), 3, 8, 0);
+			score++;
+		}
+	}
+
+	resize(check, check, Size(check.cols / 5, check.rows / 5));
+	putText(check, to_string(score), Point(500, 200), FONT_HERSHEY_PLAIN, 6, Scalar(0, 0, 0), 2);
+	imshow("Result", check);
 	waitKey();
 	return 0;
 }
